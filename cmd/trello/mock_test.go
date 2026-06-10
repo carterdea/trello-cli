@@ -41,6 +41,8 @@ type mockAPI struct {
 	updateCheckItemFn          func(ctx context.Context, cardID, itemID, state string) (trello.CheckItem, error)
 	deleteCheckItemFn          func(ctx context.Context, checklistID, itemID string) error
 	listAttachmentsFn          func(ctx context.Context, cardID string) ([]trello.Attachment, error)
+	getAttachmentFn            func(ctx context.Context, cardID, attachmentID string) (trello.Attachment, error)
+	downloadAttachmentFn       func(ctx context.Context, cardID, attachmentID, outputPath string, force bool) (trello.AttachmentDownloadResult, error)
 	addFileAttachmentFn        func(ctx context.Context, cardID, filePath string, name *string) (trello.Attachment, error)
 	addURLAttachmentFn         func(ctx context.Context, cardID, urlStr string, name *string) (trello.Attachment, error)
 	deleteAttachmentFn         func(ctx context.Context, cardID, attachmentID string) error
@@ -261,6 +263,20 @@ func (m *mockAPI) ListAttachments(ctx context.Context, cardID string) ([]trello.
 		return m.listAttachmentsFn(ctx, cardID)
 	}
 	return nil, nil
+}
+
+func (m *mockAPI) GetAttachment(ctx context.Context, cardID, attachmentID string) (trello.Attachment, error) {
+	if m.getAttachmentFn != nil {
+		return m.getAttachmentFn(ctx, cardID, attachmentID)
+	}
+	return trello.Attachment{}, nil
+}
+
+func (m *mockAPI) DownloadAttachment(ctx context.Context, cardID, attachmentID, outputPath string, force bool) (trello.AttachmentDownloadResult, error) {
+	if m.downloadAttachmentFn != nil {
+		return m.downloadAttachmentFn(ctx, cardID, attachmentID, outputPath, force)
+	}
+	return trello.AttachmentDownloadResult{}, nil
 }
 
 func (m *mockAPI) AddFileAttachment(ctx context.Context, cardID, filePath string, name *string) (trello.Attachment, error) {
@@ -575,6 +591,10 @@ func setupTestAuth(t *testing.T) {
 	resetSubFlag("attachments", "add-url", "name", "")
 	resetSubFlag("attachments", "delete", "card", "")
 	resetSubFlag("attachments", "delete", "attachment", "")
+	resetSubFlag("attachments", "download", "card", "")
+	resetSubFlag("attachments", "download", "attachment", "")
+	resetSubFlag("attachments", "download", "output", "")
+	resetSubFlag("attachments", "download", "force", "false")
 	resetSubFlag("labels", "list", "board", "")
 	resetSubFlag("labels", "create", "board", "")
 	resetSubFlag("labels", "create", "name", "")

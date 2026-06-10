@@ -83,10 +83,21 @@ type Attachment struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	URL      string `json:"url"`
+	FileName string `json:"fileName"`
 	Bytes    int    `json:"bytes"`
 	MimeType string `json:"mimeType"`
 	Date     string `json:"date"`
 	IsUpload bool   `json:"isUpload"`
+}
+
+// AttachmentDownloadResult describes a saved attachment download.
+type AttachmentDownloadResult struct {
+	ID       string `json:"id"`
+	CardID   string `json:"cardId"`
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	Bytes    int64  `json:"bytes"`
+	MimeType string `json:"mimeType"`
 }
 
 // Label represents a Trello label.

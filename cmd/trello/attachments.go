@@ -113,6 +113,35 @@ var attachmentsDeleteCmd = &cobra.Command{
 	},
 }
 
+var attachmentsDownloadCmd = &cobra.Command{
+	Use:   "download",
+	Short: "Download an attachment to a local file",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cardID, _ := cmd.Flags().GetString("card")
+		attachmentID, _ := cmd.Flags().GetString("attachment")
+		outputPath, _ := cmd.Flags().GetString("output")
+		force, _ := cmd.Flags().GetBool("force")
+		if err := contract.RequireFlag("card", cardID); err != nil {
+			return err
+		}
+		if err := contract.RequireFlag("attachment", attachmentID); err != nil {
+			return err
+		}
+		if err := contract.RequireFlag("output", outputPath); err != nil {
+			return err
+		}
+		creds, err := auth.RequireAuth(getCredStore(), "default")
+		if err != nil {
+			return err
+		}
+		result, err := getAPIClient(creds).DownloadAttachment(cmd.Context(), cardID, attachmentID, outputPath, force)
+		if err != nil {
+			return err
+		}
+		return output(cmd.OutOrStdout(), result)
+	},
+}
+
 func init() {
 	attachmentsListCmd.Flags().String("card", "", "Card ID")
 	attachmentsAddFileCmd.Flags().String("card", "", "Card ID")
@@ -123,10 +152,15 @@ func init() {
 	attachmentsAddURLCmd.Flags().String("name", "", "Attachment name")
 	attachmentsDeleteCmd.Flags().String("card", "", "Card ID")
 	attachmentsDeleteCmd.Flags().String("attachment", "", "Attachment ID")
+	attachmentsDownloadCmd.Flags().String("card", "", "Card ID")
+	attachmentsDownloadCmd.Flags().String("attachment", "", "Attachment ID")
+	attachmentsDownloadCmd.Flags().String("output", "", "Output file or directory")
+	attachmentsDownloadCmd.Flags().Bool("force", false, "Overwrite output file if it exists")
 
 	attachmentsCmd.AddCommand(attachmentsListCmd)
 	attachmentsCmd.AddCommand(attachmentsAddFileCmd)
 	attachmentsCmd.AddCommand(attachmentsAddURLCmd)
 	attachmentsCmd.AddCommand(attachmentsDeleteCmd)
+	attachmentsCmd.AddCommand(attachmentsDownloadCmd)
 	rootCmd.AddCommand(attachmentsCmd)
 }

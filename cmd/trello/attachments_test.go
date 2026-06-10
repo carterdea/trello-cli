@@ -134,3 +134,53 @@ func TestAttachmentsDeleteCommand(t *testing.T) {
 		t.Fatalf("data = %+v", data)
 	}
 }
+
+func TestAttachmentsDownloadCommand(t *testing.T) {
+	setupTestAuth(t)
+	credStore.Set("default", credentials.Credentials{APIKey: "k", Token: "t", AuthMode: "manual"})
+	outputPath := "/tmp/download.txt"
+	apiClient = &mockAPI{
+		downloadAttachmentFn: func(ctx context.Context, cardID, attachmentID, gotOutputPath string, force bool) (trello.AttachmentDownloadResult, error) {
+			if cardID != "c1" || attachmentID != "a1" || gotOutputPath != outputPath || !force {
+				t.Fatalf("download args = %q/%q/%q/%v", cardID, attachmentID, gotOutputPath, force)
+			}
+			return trello.AttachmentDownloadResult{
+				ID:       "a1",
+				CardID:   "c1",
+				Name:     "file.txt",
+				Path:     outputPath,
+				Bytes:    5,
+				MimeType: "text/plain",
+			}, nil
+		},
+	}
+
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"attachments", "download", "--card", "c1", "--attachment", "a1", "--output", outputPath, "--force"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("attachments download failed: %v", err)
+	}
+
+	var envelope map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &envelope); err != nil {
+		t.Fatalf("invalid JSON: %v\nraw: %s", err, buf.String())
+	}
+	data := envelope["data"].(map[string]any)
+	if data["id"] != "a1" || data["path"] != outputPath || data["bytes"] != float64(5) {
+		t.Fatalf("data = %+v", data)
+	}
+}
+
+func TestAttachmentsDownloadMissingOutput(t *testing.T) {
+	setupTestAuth(t)
+	credStore.Set("default", credentials.Credentials{APIKey: "k", Token: "t", AuthMode: "manual"})
+	assertContractCode(t, executeRootArgs("attachments", "download", "--card", "c1", "--attachment", "a1"), "VALIDATION_ERROR")
+}
+
+func TestAttachmentsDownloadMissingAttachment(t *testing.T) {
+	setupTestAuth(t)
+	credStore.Set("default", credentials.Credentials{APIKey: "k", Token: "t", AuthMode: "manual"})
+	assertContractCode(t, executeRootArgs("attachments", "download", "--card", "c1", "--output", "/tmp/download.txt"), "VALIDATION_ERROR")
+}

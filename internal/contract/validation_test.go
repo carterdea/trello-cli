@@ -1,6 +1,8 @@
 package contract_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Scale-Flow/trello-cli/internal/contract"
@@ -193,5 +195,59 @@ func TestValidateFilePathEmpty(t *testing.T) {
 	ce := err.(*contract.ContractError)
 	if ce.Code != contract.FileNotFound {
 		t.Errorf("Code = %q, want %q", ce.Code, contract.FileNotFound)
+	}
+}
+
+func TestValidateOutputPathNewFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "download.txt")
+	if err := contract.ValidateOutputPath(path, false); err != nil {
+		t.Fatalf("ValidateOutputPath() error: %v", err)
+	}
+}
+
+func TestValidateOutputPathExistingDirectory(t *testing.T) {
+	if err := contract.ValidateOutputPath(t.TempDir(), false); err != nil {
+		t.Fatalf("ValidateOutputPath() with directory error: %v", err)
+	}
+}
+
+func TestValidateOutputPathExistingFileRequiresForce(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "download.txt")
+	if err := os.WriteFile(path, []byte("old"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error: %v", err)
+	}
+	err := contract.ValidateOutputPath(path, false)
+	if err == nil {
+		t.Fatal("ValidateOutputPath() with existing file should return error")
+	}
+	ce := err.(*contract.ContractError)
+	if ce.Code != contract.Conflict {
+		t.Errorf("Code = %q, want %q", ce.Code, contract.Conflict)
+	}
+	if err := contract.ValidateOutputPath(path, true); err != nil {
+		t.Fatalf("ValidateOutputPath() with force error: %v", err)
+	}
+}
+
+func TestValidateOutputPathMissingParent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing", "download.txt")
+	err := contract.ValidateOutputPath(path, false)
+	if err == nil {
+		t.Fatal("ValidateOutputPath() with missing parent should return error")
+	}
+	ce := err.(*contract.ContractError)
+	if ce.Code != contract.FileNotFound {
+		t.Errorf("Code = %q, want %q", ce.Code, contract.FileNotFound)
+	}
+}
+
+func TestValidateOutputPathEmpty(t *testing.T) {
+	err := contract.ValidateOutputPath("", false)
+	if err == nil {
+		t.Fatal("ValidateOutputPath() with empty path should return error")
+	}
+	ce := err.(*contract.ContractError)
+	if ce.Code != contract.ValidationError {
+		t.Errorf("Code = %q, want %q", ce.Code, contract.ValidationError)
 	}
 }

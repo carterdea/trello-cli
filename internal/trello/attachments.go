@@ -8,8 +8,11 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/Scale-Flow/trello-cli/internal/contract"
 )
@@ -18,6 +21,66 @@ func (c *Client) ListAttachments(ctx context.Context, cardID string) ([]Attachme
 	var attachments []Attachment
 	err := c.Get(ctx, fmt.Sprintf("/1/cards/%s/attachments", cardID), nil, &attachments)
 	return attachments, err
+}
+
+func (c *Client) GetAttachment(ctx context.Context, cardID, attachmentID string) (Attachment, error) {
+	var attachment Attachment
+	err := c.Get(ctx, fmt.Sprintf("/1/cards/%s/attachments/%s", cardID, attachmentID), nil, &attachment)
+	return attachment, err
+}
+
+func (c *Client) DownloadAttachment(ctx context.Context, cardID, attachmentID, outputPath string, force bool) (AttachmentDownloadResult, error) {
+	attachment, err := c.GetAttachment(ctx, cardID, attachmentID)
+	if err != nil {
+		return AttachmentDownloadResult{}, err
+	}
+	if err := contract.ValidateURL(attachment.URL); err != nil {
+		return AttachmentDownloadResult{}, err
+	}
+
+	finalPath, err := resolveAttachmentOutputPath(outputPath, attachment)
+	if err != nil {
+		return AttachmentDownloadResult{}, err
+	}
+	if err := contract.ValidateOutputPath(finalPath, force); err != nil {
+		return AttachmentDownloadResult{}, err
+	}
+
+	downloadURL, err := c.attachmentDownloadURL(attachment)
+	if err != nil {
+		return AttachmentDownloadResult{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return AttachmentDownloadResult{}, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return AttachmentDownloadResult{}, contract.NewError(contract.HTTPError, fmt.Sprintf("download failed: %v", err))
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		return AttachmentDownloadResult{}, mapHTTPError(resp)
+	}
+
+	file, err := os.OpenFile(finalPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return AttachmentDownloadResult{}, contract.NewError(contract.UnknownError, fmt.Sprintf("cannot create output file: %v", err))
+	}
+	defer file.Close()
+	written, err := io.Copy(file, resp.Body)
+	if err != nil {
+		return AttachmentDownloadResult{}, contract.NewError(contract.UnknownError, fmt.Sprintf("failed to write output file: %v", err))
+	}
+
+	return AttachmentDownloadResult{
+		ID:       attachment.ID,
+		CardID:   cardID,
+		Name:     attachment.Name,
+		Path:     finalPath,
+		Bytes:    written,
+		MimeType: attachment.MimeType,
+	}, nil
 }
 
 func (c *Client) AddURLAttachment(ctx context.Context, cardID, urlStr string, name *string) (Attachment, error) {
@@ -42,6 +105,83 @@ func (c *Client) AddFileAttachment(ctx context.Context, cardID, filePath string,
 
 func (c *Client) DeleteAttachment(ctx context.Context, cardID, attachmentID string) error {
 	return c.Delete(ctx, fmt.Sprintf("/1/cards/%s/attachments/%s", cardID, attachmentID), nil)
+}
+
+func (c *Client) attachmentDownloadURL(attachment Attachment) (string, error) {
+	u, err := url.Parse(attachment.URL)
+	if err != nil {
+		return "", err
+	}
+	if isTrelloHost(u.Hostname()) || (attachment.IsUpload && c.isBaseHost(u.Hostname())) {
+		q := u.Query()
+		q.Set("key", c.apiKey)
+		q.Set("token", c.token)
+		u.RawQuery = q.Encode()
+	}
+	return u.String(), nil
+}
+
+func (c *Client) isBaseHost(host string) bool {
+	u, err := url.Parse(c.baseURL)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(u.Hostname(), host)
+}
+
+func isTrelloHost(host string) bool {
+	host = strings.ToLower(host)
+	return host == "trello.com" || strings.HasSuffix(host, ".trello.com")
+}
+
+func resolveAttachmentOutputPath(outputPath string, attachment Attachment) (string, error) {
+	if outputPath == "" {
+		return "", contract.NewError(contract.ValidationError, "output path is required")
+	}
+	info, err := os.Stat(outputPath)
+	if err == nil && info.IsDir() {
+		name := attachmentDownloadFilename(attachment)
+		if name == "" {
+			return "", contract.NewError(contract.ValidationError, "could not derive attachment filename")
+		}
+		return filepath.Join(outputPath, name), nil
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return "", contract.NewError(contract.UnknownError, fmt.Sprintf("cannot inspect output path: %v", err))
+	}
+	return outputPath, nil
+}
+
+func attachmentDownloadFilename(attachment Attachment) string {
+	for _, candidate := range []string{
+		attachment.FileName,
+		attachment.Name,
+		urlPathBase(attachment.URL),
+		attachment.ID,
+	} {
+		if name := cleanFilename(candidate); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+func urlPathBase(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return path.Base(u.Path)
+}
+
+func cleanFilename(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.ReplaceAll(name, "\\", "/")
+	name = path.Base(name)
+	if name == "." || name == "/" {
+		return ""
+	}
+	return name
 }
 
 // postMultipartFile handles multipart/form-data file uploads.
