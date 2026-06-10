@@ -155,9 +155,11 @@ Config/schema/migration files:
 - [x] Implement `GetAttachment` using `GET /1/cards/{id}/attachments/{idAttachment}` -- `internal/trello/attachments.go` (lines 17-45)
   - QA: Run `trello attachments download --card <card-id> --attachment <attachment-id> --output ./downloaded-file`; expect metadata lookup before download.
 - [x] Implement `DownloadAttachment` to fetch metadata, resolve output path, download `Attachment.URL`, and write bytes -- `internal/trello/attachments.go` (lines 17-45)
-  - [ ] QA: Run `trello attachments download --card <card-id> --attachment <attachment-id> --output ./downloaded-file`; expect the file to exist and JSON to report `path` and `bytes`.
+  - [x] QA: Run `trello attachments download --card <card-id> --attachment <attachment-id> --output ./downloaded-file`; expect the file to exist and JSON to report `path` and `bytes`.
+    > PASS: Uploaded Trello attachment downloaded to `qa/attachment-download-qa-20260609210259/download-uploaded.txt`; stdout JSON reported `path` and `bytes`, and the downloaded file matched the uploaded source.
 - [x] Add authenticated Trello-hosted URL handling and direct external URL handling -- `internal/trello/attachments.go` (lines 17-45)
-  - [ ] QA: Download one uploaded Trello file and one URL attachment; expect both files to save without exposing binary content on stdout.
+  - [x] QA: Download one uploaded Trello file and one URL attachment; expect both files to save without exposing binary content on stdout.
+    > PASS: Uploaded Trello file and external URL attachment both saved under `qa/attachment-download-qa-20260609210259/`; stdout captures parsed as JSON-only artifacts.
 - [x] Add `attachments download` command and flags -- `cmd/trello/attachments.go` (lines 93-131)
   - [x] QA: Run `trello attachments download --card <card-id> --attachment <attachment-id> --output ./downloaded-file`; expect JSON output and no binary stdout.
     > PASS: External URL attachment download returned a JSON envelope with `path` and `bytes` and wrote content to disk without binary stdout. Artifact: `qa/attachment-download-qa-20260609204910/download-url-fresh.json`.
