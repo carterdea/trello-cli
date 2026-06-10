@@ -42,7 +42,7 @@ func (c *Client) DownloadAttachment(ctx context.Context, cardID, attachmentID, o
 	if err != nil {
 		return AttachmentDownloadResult{}, err
 	}
-	if err := contract.ValidateOutputPath(finalPath, force); err != nil {
+	if err := validateAttachmentOutputFile(finalPath, force); err != nil {
 		return AttachmentDownloadResult{}, err
 	}
 
@@ -184,6 +184,37 @@ func cleanFilename(name string) string {
 		return ""
 	}
 	return name
+}
+
+func validateAttachmentOutputFile(path string, force bool) error {
+	if path == "" {
+		return contract.NewError(contract.ValidationError, "output path is required")
+	}
+	info, err := os.Stat(path)
+	if err == nil {
+		if info.IsDir() {
+			return contract.NewError(contract.ValidationError, fmt.Sprintf("output path is a directory: %s", path))
+		}
+		if force {
+			return nil
+		}
+		return contract.NewError(contract.Conflict, fmt.Sprintf("output file already exists: %s", path))
+	}
+	if !os.IsNotExist(err) {
+		return contract.NewError(contract.UnknownError, fmt.Sprintf("cannot inspect output path: %v", err))
+	}
+	parent := filepath.Dir(path)
+	if parent == "." || parent == "" {
+		return nil
+	}
+	parentInfo, err := os.Stat(parent)
+	if err != nil {
+		return contract.NewError(contract.FileNotFound, fmt.Sprintf("output directory not found: %s", parent))
+	}
+	if !parentInfo.IsDir() {
+		return contract.NewError(contract.ValidationError, fmt.Sprintf("output parent is not a directory: %s", parent))
+	}
+	return nil
 }
 
 func openAttachmentOutputFile(path string, force bool) (*os.File, error) {

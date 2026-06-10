@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Scale-Flow/trello-cli/internal/contract"
 	"github.com/Scale-Flow/trello-cli/internal/trello"
 )
 
@@ -323,6 +324,37 @@ func TestDownloadAttachmentDirectoryOutputRejectsDotDotFileName(t *testing.T) {
 	}
 }
 
+func TestDownloadAttachmentDirectoryOutputRejectsExistingDirectoryTarget(t *testing.T) {
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/1/cards/c1/attachments/a1" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"id": "a1", "name": "nested", "url": serverURL + "/download/nested", "fileName": "nested", "bytes": 4, "mimeType": "text/plain", "date": "2026-03-13T12:00:00Z", "isUpload": false,
+		}); err != nil {
+			t.Fatalf("Encode() error: %v", err)
+		}
+	}))
+	serverURL = server.URL
+	defer server.Close()
+
+	outputDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(outputDir, "nested"), 0o700); err != nil {
+		t.Fatalf("Mkdir() error: %v", err)
+	}
+
+	client := trello.NewClient(server.URL, "k", "t", trello.DefaultClientOptions())
+	_, err := client.DownloadAttachment(context.Background(), "c1", "a1", outputDir, false)
+	if err == nil {
+		t.Fatal("DownloadAttachment() should reject a derived path that is a directory")
+	}
+	ce, ok := err.(*contract.ContractError)
+	if !ok || ce.Code != contract.ValidationError {
+		t.Fatalf("error = %v, want VALIDATION_ERROR", err)
+	}
+}
+
 func TestDownloadAttachmentExternalURLDoesNotAppendAuth(t *testing.T) {
 	var serverURL string
 	var downloadQuery string
@@ -387,6 +419,33 @@ func TestDownloadAttachmentRefusesOverwrite(t *testing.T) {
 	}
 	if string(data) != "old" {
 		t.Fatalf("existing data = %q, want old", string(data))
+	}
+}
+
+func TestDownloadAttachmentRejectsMissingOutputParent(t *testing.T) {
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/1/cards/c1/attachments/a1" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"id": "a1", "name": "file.txt", "url": serverURL + "/download/file.txt", "bytes": 5, "mimeType": "text/plain", "date": "2026-03-13T12:00:00Z", "isUpload": true,
+		}); err != nil {
+			t.Fatalf("Encode() error: %v", err)
+		}
+	}))
+	serverURL = server.URL
+	defer server.Close()
+
+	outputPath := filepath.Join(t.TempDir(), "missing", "saved.txt")
+	client := trello.NewClient(server.URL, "k", "t", trello.DefaultClientOptions())
+	_, err := client.DownloadAttachment(context.Background(), "c1", "a1", outputPath, false)
+	if err == nil {
+		t.Fatal("DownloadAttachment() should reject missing output parent")
+	}
+	ce, ok := err.(*contract.ContractError)
+	if !ok || ce.Code != contract.FileNotFound {
+		t.Fatalf("error = %v, want FILE_NOT_FOUND", err)
 	}
 }
 

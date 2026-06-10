@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -92,33 +91,6 @@ func ValidateFilePath(path string) error {
 	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return NewError(FileNotFound, fmt.Sprintf("file not found: %s", path))
-	}
-	return nil
-}
-
-// ValidateOutputPath returns an error if a download output path is unusable.
-func ValidateOutputPath(path string, force bool) error {
-	if path == "" {
-		return NewError(ValidationError, "output path is required")
-	}
-	info, err := os.Stat(path)
-	if err == nil {
-		if info.IsDir() || force {
-			return nil
-		}
-		return NewError(Conflict, fmt.Sprintf("output file already exists: %s", path))
-	}
-	if !os.IsNotExist(err) {
-		return NewError(UnknownError, fmt.Sprintf("cannot inspect output path: %v", err))
-	}
-	parent := filepath.Dir(path)
-	if parent == "." || parent == "" {
-		return nil
-	}
-	if parentInfo, err := os.Stat(parent); err != nil {
-		return NewError(FileNotFound, fmt.Sprintf("output directory not found: %s", parent))
-	} else if !parentInfo.IsDir() {
-		return NewError(ValidationError, fmt.Sprintf("output parent is not a directory: %s", parent))
 	}
 	return nil
 }
