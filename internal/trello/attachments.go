@@ -66,9 +66,9 @@ func (c *Client) DownloadAttachment(ctx context.Context, cardID, attachmentID, o
 		return AttachmentDownloadResult{}, mapHTTPError(resp)
 	}
 
-	file, err := os.OpenFile(finalPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	file, err := openAttachmentOutputFile(finalPath, force)
 	if err != nil {
-		return AttachmentDownloadResult{}, contract.NewError(contract.UnknownError, fmt.Sprintf("cannot create output file: %v", err))
+		return AttachmentDownloadResult{}, err
 	}
 	defer file.Close()
 	written, err := io.Copy(file, resp.Body)
@@ -180,10 +180,27 @@ func cleanFilename(name string) string {
 	name = strings.TrimSpace(name)
 	name = strings.ReplaceAll(name, "\\", "/")
 	name = path.Base(name)
-	if name == "." || name == "/" {
+	if name == "." || name == ".." || name == "/" {
 		return ""
 	}
 	return name
+}
+
+func openAttachmentOutputFile(path string, force bool) (*os.File, error) {
+	flags := os.O_CREATE | os.O_WRONLY
+	if force {
+		flags |= os.O_TRUNC
+	} else {
+		flags |= os.O_EXCL
+	}
+	file, err := os.OpenFile(path, flags, 0o600)
+	if err == nil {
+		return file, nil
+	}
+	if os.IsExist(err) {
+		return nil, contract.NewError(contract.Conflict, fmt.Sprintf("output file already exists: %s", path))
+	}
+	return nil, contract.NewError(contract.UnknownError, fmt.Sprintf("cannot create output file: %v", err))
 }
 
 // postMultipartFile handles multipart/form-data file uploads.

@@ -292,6 +292,37 @@ func TestDownloadAttachmentDirectoryOutputUsesSanitizedFileName(t *testing.T) {
 	}
 }
 
+func TestDownloadAttachmentDirectoryOutputRejectsDotDotFileName(t *testing.T) {
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/1/cards/c1/attachments/a1":
+			if err := json.NewEncoder(w).Encode(map[string]any{
+				"id": "a1", "name": "fallback.txt", "url": serverURL + "/download/file.txt", "fileName": "..", "bytes": 4, "mimeType": "text/plain", "date": "2026-03-13T12:00:00Z", "isUpload": false,
+			}); err != nil {
+				t.Fatalf("Encode() error: %v", err)
+			}
+		case "/download/file.txt":
+			_, _ = w.Write([]byte("data"))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	serverURL = server.URL
+	defer server.Close()
+
+	outputDir := t.TempDir()
+	client := trello.NewClient(server.URL, "k", "t", trello.DefaultClientOptions())
+	result, err := client.DownloadAttachment(context.Background(), "c1", "a1", outputDir, false)
+	if err != nil {
+		t.Fatalf("DownloadAttachment() error: %v", err)
+	}
+	wantPath := filepath.Join(outputDir, "fallback.txt")
+	if result.Path != wantPath {
+		t.Fatalf("result path = %q, want %q", result.Path, wantPath)
+	}
+}
+
 func TestDownloadAttachmentExternalURLDoesNotAppendAuth(t *testing.T) {
 	var serverURL string
 	var downloadQuery string
@@ -356,5 +387,41 @@ func TestDownloadAttachmentRefusesOverwrite(t *testing.T) {
 	}
 	if string(data) != "old" {
 		t.Fatalf("existing data = %q, want old", string(data))
+	}
+}
+
+func TestDownloadAttachmentRefusesOverwriteCreatedAfterValidation(t *testing.T) {
+	var serverURL string
+	outputPath := filepath.Join(t.TempDir(), "saved.txt")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/1/cards/c1/attachments/a1":
+			if err := json.NewEncoder(w).Encode(map[string]any{
+				"id": "a1", "name": "file.txt", "url": serverURL + "/download/file.txt", "bytes": 5, "mimeType": "text/plain", "date": "2026-03-13T12:00:00Z", "isUpload": true,
+			}); err != nil {
+				t.Fatalf("Encode() error: %v", err)
+			}
+		case "/download/file.txt":
+			if err := os.WriteFile(outputPath, []byte("created during download"), 0o600); err != nil {
+				t.Fatalf("WriteFile() error: %v", err)
+			}
+			_, _ = w.Write([]byte("hello"))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	serverURL = server.URL
+	defer server.Close()
+
+	client := trello.NewClient(server.URL, "k", "t", trello.DefaultClientOptions())
+	if _, err := client.DownloadAttachment(context.Background(), "c1", "a1", outputPath, false); err == nil {
+		t.Fatal("DownloadAttachment() should reject file created after validation")
+	}
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error: %v", err)
+	}
+	if string(data) != "created during download" {
+		t.Fatalf("existing data = %q, want file created during download", string(data))
 	}
 }
