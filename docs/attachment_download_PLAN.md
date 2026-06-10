@@ -77,8 +77,8 @@ Add:
 Use `Attachment.URL` as the download URL.
 
 Download policy:
-- `isUpload=true`: download Trello-hosted file from `Attachment.URL` with Trello auth appended.
-- `isUpload=false`: download the external URL directly, with no Trello auth appended unless the URL host is Trello.
+- `isUpload=true`: download Trello-hosted file from `Attachment.URL` with Trello auth in the OAuth `Authorization` header.
+- `isUpload=false`: download the external URL directly, with no Trello auth header unless the URL host is Trello.
 - Only allow `http` and `https` URLs.
 - Save whatever bytes HTTP returns. Do not inspect or convert content.
 
@@ -159,7 +159,8 @@ Config/schema/migration files:
 - [x] Add authenticated Trello-hosted URL handling and direct external URL handling -- `internal/trello/attachments.go` (lines 17-45)
   - [ ] QA: Download one uploaded Trello file and one URL attachment; expect both files to save without exposing binary content on stdout.
 - [x] Add `attachments download` command and flags -- `cmd/trello/attachments.go` (lines 93-131)
-  - [ ] QA: Run `trello attachments download --card <card-id> --attachment <attachment-id> --output ./downloaded-file`; expect JSON output and no binary stdout.
+  - [x] QA: Run `trello attachments download --card <card-id> --attachment <attachment-id> --output ./downloaded-file`; expect JSON output and no binary stdout.
+    > PASS: External URL attachment download returned a JSON envelope with `path` and `bytes` and wrote content to disk without binary stdout. Artifact: `qa/attachment-download-qa-20260609204910/download-url-fresh.json`.
 - [x] Update command mock and flag reset -- `cmd/trello/mock_test.go` (lines 43-46, 258-285, 569-577)
   - QA: N/A
 

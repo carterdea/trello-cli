@@ -46,13 +46,16 @@ func (c *Client) DownloadAttachment(ctx context.Context, cardID, attachmentID, o
 		return AttachmentDownloadResult{}, err
 	}
 
-	downloadURL, err := c.attachmentDownloadURL(attachment)
+	downloadURL, needsAuth, err := c.attachmentDownloadURL(attachment)
 	if err != nil {
 		return AttachmentDownloadResult{}, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {
 		return AttachmentDownloadResult{}, err
+	}
+	if needsAuth {
+		c.setTrelloAuthorization(req)
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -107,18 +110,17 @@ func (c *Client) DeleteAttachment(ctx context.Context, cardID, attachmentID stri
 	return c.Delete(ctx, fmt.Sprintf("/1/cards/%s/attachments/%s", cardID, attachmentID), nil)
 }
 
-func (c *Client) attachmentDownloadURL(attachment Attachment) (string, error) {
+func (c *Client) attachmentDownloadURL(attachment Attachment) (string, bool, error) {
 	u, err := url.Parse(attachment.URL)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	if isTrelloHost(u.Hostname()) || (attachment.IsUpload && c.isBaseHost(u.Hostname())) {
-		q := u.Query()
-		q.Set("key", c.apiKey)
-		q.Set("token", c.token)
-		u.RawQuery = q.Encode()
-	}
-	return u.String(), nil
+	needsAuth := isTrelloHost(u.Hostname()) || (attachment.IsUpload && c.isBaseHost(u.Hostname()))
+	return u.String(), needsAuth, nil
+}
+
+func (c *Client) setTrelloAuthorization(req *http.Request) {
+	req.Header.Set("Authorization", fmt.Sprintf(`OAuth oauth_consumer_key="%s", oauth_token="%s"`, c.apiKey, c.token))
 }
 
 func (c *Client) isBaseHost(host string) bool {

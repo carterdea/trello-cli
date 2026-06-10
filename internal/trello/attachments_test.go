@@ -225,8 +225,12 @@ func TestDownloadAttachmentWritesFile(t *testing.T) {
 				t.Fatalf("Encode() error: %v", err)
 			}
 		case "/download/file.txt":
-			if r.URL.Query().Get("key") != "k" || r.URL.Query().Get("token") != "t" {
-				t.Errorf("download query missing auth: %s", r.URL.RawQuery)
+			wantAuth := `OAuth oauth_consumer_key="k", oauth_token="t"`
+			if r.Header.Get("Authorization") != wantAuth {
+				t.Errorf("download authorization = %q, want %q", r.Header.Get("Authorization"), wantAuth)
+			}
+			if r.URL.RawQuery != "" {
+				t.Errorf("download query = %q, want empty", r.URL.RawQuery)
 			}
 			_, _ = w.Write([]byte("hello"))
 		default:
@@ -291,6 +295,7 @@ func TestDownloadAttachmentDirectoryOutputUsesSanitizedFileName(t *testing.T) {
 func TestDownloadAttachmentExternalURLDoesNotAppendAuth(t *testing.T) {
 	var serverURL string
 	var downloadQuery string
+	var downloadAuth string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/1/cards/c1/attachments/a1":
@@ -301,6 +306,7 @@ func TestDownloadAttachmentExternalURLDoesNotAppendAuth(t *testing.T) {
 			}
 		case "/external":
 			downloadQuery = r.URL.RawQuery
+			downloadAuth = r.Header.Get("Authorization")
 			_, _ = w.Write([]byte("content"))
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -315,6 +321,9 @@ func TestDownloadAttachmentExternalURLDoesNotAppendAuth(t *testing.T) {
 	}
 	if downloadQuery != "existing=1" {
 		t.Fatalf("download query = %q, want existing=1", downloadQuery)
+	}
+	if downloadAuth != "" {
+		t.Fatalf("download authorization = %q, want empty", downloadAuth)
 	}
 }
 
