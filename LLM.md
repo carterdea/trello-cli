@@ -176,6 +176,7 @@ Top-level commands:
 - `attachments list --card <card-id>`
 - `attachments add-file --card <card-id> --path <local-path> [--name <display-name>]`
 - `attachments add-url --card <card-id> --url <http-or-https-url> [--name <display-name>]`
+- `attachments download --card <card-id> --attachment <attachment-id> --output <local-path-or-dir> [--force]`
 - `attachments delete --card <card-id> --attachment <attachment-id>`
 
 ### Custom Fields
@@ -223,6 +224,7 @@ Top-level commands:
 - `--due` values must be ISO-8601 compatible
 - `attachments add-url` only accepts valid `http` or `https` URLs
 - `attachments add-file` requires an existing local file path
+- `attachments download` writes to `--output` and refuses overwrite unless `--force`
 - Checklist item state must be `complete` or `incomplete`
 - `custom-fields create` requires `--board`, `--name`, and `--type`; `--type` must be one of `text`, `number`, `date`, `checkbox`, `list`; `--option` is only allowed with `--type list`
 - `custom-fields update` requires `--field` and at least one mutation flag

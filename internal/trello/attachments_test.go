@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/Scale-Flow/trello-cli/internal/contract"
 	"github.com/Scale-Flow/trello-cli/internal/trello"
 )
 
@@ -184,5 +186,301 @@ func TestDeleteAttachment(t *testing.T) {
 	}
 	if capturedPath != "/1/cards/c1/attachments/a1" {
 		t.Errorf("path = %s, want /1/cards/c1/attachments/a1", capturedPath)
+	}
+}
+
+func TestGetAttachment(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %s, want GET", r.Method)
+		}
+		if r.URL.Path != "/1/cards/c1/attachments/a1" {
+			t.Errorf("path = %s, want /1/cards/c1/attachments/a1", r.URL.Path)
+		}
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"id": "a1", "name": "Report", "url": "https://example.com/report.pdf", "fileName": "report.pdf", "bytes": 4, "mimeType": "application/pdf", "date": "2026-03-13T12:00:00Z", "isUpload": true,
+		}); err != nil {
+			t.Fatalf("Encode() error: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := trello.NewClient(server.URL, "k", "t", trello.DefaultClientOptions())
+	attachment, err := client.GetAttachment(context.Background(), "c1", "a1")
+	if err != nil {
+		t.Fatalf("GetAttachment() error: %v", err)
+	}
+	if attachment.ID != "a1" || attachment.FileName != "report.pdf" {
+		t.Fatalf("attachment = %+v", attachment)
+	}
+}
+
+func TestDownloadAttachmentWritesFile(t *testing.T) {
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/1/cards/c1/attachments/a1":
+			if err := json.NewEncoder(w).Encode(map[string]any{
+				"id": "a1", "name": "file.txt", "url": serverURL + "/download/file.txt", "fileName": "file.txt", "bytes": 5, "mimeType": "text/plain", "date": "2026-03-13T12:00:00Z", "isUpload": true,
+			}); err != nil {
+				t.Fatalf("Encode() error: %v", err)
+			}
+		case "/download/file.txt":
+			wantAuth := `OAuth oauth_consumer_key="k", oauth_token="t"`
+			if r.Header.Get("Authorization") != wantAuth {
+				t.Errorf("download authorization = %q, want %q", r.Header.Get("Authorization"), wantAuth)
+			}
+			if r.URL.RawQuery != "" {
+				t.Errorf("download query = %q, want empty", r.URL.RawQuery)
+			}
+			_, _ = w.Write([]byte("hello"))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	serverURL = server.URL
+	defer server.Close()
+
+	outputPath := filepath.Join(t.TempDir(), "saved.txt")
+	client := trello.NewClient(server.URL, "k", "t", trello.DefaultClientOptions())
+	result, err := client.DownloadAttachment(context.Background(), "c1", "a1", outputPath, false)
+	if err != nil {
+		t.Fatalf("DownloadAttachment() error: %v", err)
+	}
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error: %v", err)
+	}
+	if string(data) != "hello" {
+		t.Fatalf("downloaded data = %q, want hello", string(data))
+	}
+	if result.Path != outputPath || result.Bytes != 5 {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestDownloadAttachmentDirectoryOutputUsesSanitizedFileName(t *testing.T) {
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/1/cards/c1/attachments/a1":
+			if err := json.NewEncoder(w).Encode(map[string]any{
+				"id": "a1", "name": "ignored.txt", "url": serverURL + "/download/report.pdf", "fileName": "../report.pdf", "bytes": 3, "mimeType": "application/pdf", "date": "2026-03-13T12:00:00Z", "isUpload": false,
+			}); err != nil {
+				t.Fatalf("Encode() error: %v", err)
+			}
+		case "/download/report.pdf":
+			_, _ = w.Write([]byte("pdf"))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	serverURL = server.URL
+	defer server.Close()
+
+	outputDir := t.TempDir()
+	client := trello.NewClient(server.URL, "k", "t", trello.DefaultClientOptions())
+	result, err := client.DownloadAttachment(context.Background(), "c1", "a1", outputDir, false)
+	if err != nil {
+		t.Fatalf("DownloadAttachment() error: %v", err)
+	}
+	wantPath := filepath.Join(outputDir, "report.pdf")
+	if result.Path != wantPath {
+		t.Fatalf("result path = %q, want %q", result.Path, wantPath)
+	}
+	if data, err := os.ReadFile(wantPath); err != nil || string(data) != "pdf" {
+		t.Fatalf("downloaded data = %q, err = %v", string(data), err)
+	}
+}
+
+func TestDownloadAttachmentDirectoryOutputRejectsDotDotFileName(t *testing.T) {
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/1/cards/c1/attachments/a1":
+			if err := json.NewEncoder(w).Encode(map[string]any{
+				"id": "a1", "name": "fallback.txt", "url": serverURL + "/download/file.txt", "fileName": "..", "bytes": 4, "mimeType": "text/plain", "date": "2026-03-13T12:00:00Z", "isUpload": false,
+			}); err != nil {
+				t.Fatalf("Encode() error: %v", err)
+			}
+		case "/download/file.txt":
+			_, _ = w.Write([]byte("data"))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	serverURL = server.URL
+	defer server.Close()
+
+	outputDir := t.TempDir()
+	client := trello.NewClient(server.URL, "k", "t", trello.DefaultClientOptions())
+	result, err := client.DownloadAttachment(context.Background(), "c1", "a1", outputDir, false)
+	if err != nil {
+		t.Fatalf("DownloadAttachment() error: %v", err)
+	}
+	wantPath := filepath.Join(outputDir, "fallback.txt")
+	if result.Path != wantPath {
+		t.Fatalf("result path = %q, want %q", result.Path, wantPath)
+	}
+}
+
+func TestDownloadAttachmentDirectoryOutputRejectsExistingDirectoryTarget(t *testing.T) {
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/1/cards/c1/attachments/a1" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"id": "a1", "name": "nested", "url": serverURL + "/download/nested", "fileName": "nested", "bytes": 4, "mimeType": "text/plain", "date": "2026-03-13T12:00:00Z", "isUpload": false,
+		}); err != nil {
+			t.Fatalf("Encode() error: %v", err)
+		}
+	}))
+	serverURL = server.URL
+	defer server.Close()
+
+	outputDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(outputDir, "nested"), 0o700); err != nil {
+		t.Fatalf("Mkdir() error: %v", err)
+	}
+
+	client := trello.NewClient(server.URL, "k", "t", trello.DefaultClientOptions())
+	_, err := client.DownloadAttachment(context.Background(), "c1", "a1", outputDir, false)
+	if err == nil {
+		t.Fatal("DownloadAttachment() should reject a derived path that is a directory")
+	}
+	ce, ok := err.(*contract.ContractError)
+	if !ok || ce.Code != contract.ValidationError {
+		t.Fatalf("error = %v, want VALIDATION_ERROR", err)
+	}
+}
+
+func TestDownloadAttachmentExternalURLDoesNotAppendAuth(t *testing.T) {
+	var serverURL string
+	var downloadQuery string
+	var downloadAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/1/cards/c1/attachments/a1":
+			if err := json.NewEncoder(w).Encode(map[string]any{
+				"id": "a1", "name": "external", "url": serverURL + "/external?existing=1", "bytes": 7, "mimeType": "text/plain", "date": "2026-03-13T12:00:00Z", "isUpload": false,
+			}); err != nil {
+				t.Fatalf("Encode() error: %v", err)
+			}
+		case "/external":
+			downloadQuery = r.URL.RawQuery
+			downloadAuth = r.Header.Get("Authorization")
+			_, _ = w.Write([]byte("content"))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	serverURL = server.URL
+	defer server.Close()
+
+	client := trello.NewClient(server.URL, "k", "t", trello.DefaultClientOptions())
+	if _, err := client.DownloadAttachment(context.Background(), "c1", "a1", filepath.Join(t.TempDir(), "external.txt"), false); err != nil {
+		t.Fatalf("DownloadAttachment() error: %v", err)
+	}
+	if downloadQuery != "existing=1" {
+		t.Fatalf("download query = %q, want existing=1", downloadQuery)
+	}
+	if downloadAuth != "" {
+		t.Fatalf("download authorization = %q, want empty", downloadAuth)
+	}
+}
+
+func TestDownloadAttachmentRefusesOverwrite(t *testing.T) {
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/1/cards/c1/attachments/a1" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"id": "a1", "name": "file.txt", "url": serverURL + "/download/file.txt", "bytes": 5, "mimeType": "text/plain", "date": "2026-03-13T12:00:00Z", "isUpload": true,
+		}); err != nil {
+			t.Fatalf("Encode() error: %v", err)
+		}
+	}))
+	serverURL = server.URL
+	defer server.Close()
+
+	outputPath := filepath.Join(t.TempDir(), "saved.txt")
+	if err := os.WriteFile(outputPath, []byte("old"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error: %v", err)
+	}
+	client := trello.NewClient(server.URL, "k", "t", trello.DefaultClientOptions())
+	if _, err := client.DownloadAttachment(context.Background(), "c1", "a1", outputPath, false); err == nil {
+		t.Fatal("DownloadAttachment() should reject existing file without force")
+	}
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error: %v", err)
+	}
+	if string(data) != "old" {
+		t.Fatalf("existing data = %q, want old", string(data))
+	}
+}
+
+func TestDownloadAttachmentRejectsMissingOutputParent(t *testing.T) {
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/1/cards/c1/attachments/a1" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"id": "a1", "name": "file.txt", "url": serverURL + "/download/file.txt", "bytes": 5, "mimeType": "text/plain", "date": "2026-03-13T12:00:00Z", "isUpload": true,
+		}); err != nil {
+			t.Fatalf("Encode() error: %v", err)
+		}
+	}))
+	serverURL = server.URL
+	defer server.Close()
+
+	outputPath := filepath.Join(t.TempDir(), "missing", "saved.txt")
+	client := trello.NewClient(server.URL, "k", "t", trello.DefaultClientOptions())
+	_, err := client.DownloadAttachment(context.Background(), "c1", "a1", outputPath, false)
+	if err == nil {
+		t.Fatal("DownloadAttachment() should reject missing output parent")
+	}
+	ce, ok := err.(*contract.ContractError)
+	if !ok || ce.Code != contract.FileNotFound {
+		t.Fatalf("error = %v, want FILE_NOT_FOUND", err)
+	}
+}
+
+func TestDownloadAttachmentRefusesOverwriteCreatedAfterValidation(t *testing.T) {
+	var serverURL string
+	outputPath := filepath.Join(t.TempDir(), "saved.txt")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/1/cards/c1/attachments/a1":
+			if err := json.NewEncoder(w).Encode(map[string]any{
+				"id": "a1", "name": "file.txt", "url": serverURL + "/download/file.txt", "bytes": 5, "mimeType": "text/plain", "date": "2026-03-13T12:00:00Z", "isUpload": true,
+			}); err != nil {
+				t.Fatalf("Encode() error: %v", err)
+			}
+		case "/download/file.txt":
+			if err := os.WriteFile(outputPath, []byte("created during download"), 0o600); err != nil {
+				t.Fatalf("WriteFile() error: %v", err)
+			}
+			_, _ = w.Write([]byte("hello"))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	serverURL = server.URL
+	defer server.Close()
+
+	client := trello.NewClient(server.URL, "k", "t", trello.DefaultClientOptions())
+	if _, err := client.DownloadAttachment(context.Background(), "c1", "a1", outputPath, false); err == nil {
+		t.Fatal("DownloadAttachment() should reject file created after validation")
+	}
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error: %v", err)
+	}
+	if string(data) != "created during download" {
+		t.Fatalf("existing data = %q, want file created during download", string(data))
 	}
 }

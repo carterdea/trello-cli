@@ -89,6 +89,8 @@ type API interface {
 	DeleteCheckItem(ctx context.Context, checklistID, itemID string) error
 	// Attachments
 	ListAttachments(ctx context.Context, cardID string) ([]Attachment, error)
+	GetAttachment(ctx context.Context, cardID, attachmentID string) (Attachment, error)
+	DownloadAttachment(ctx context.Context, cardID, attachmentID, outputPath string, force bool) (AttachmentDownloadResult, error)
 	AddFileAttachment(ctx context.Context, cardID, filePath string, name *string) (Attachment, error)
 	AddURLAttachment(ctx context.Context, cardID, urlStr string, name *string) (Attachment, error)
 	DeleteAttachment(ctx context.Context, cardID, attachmentID string) error
