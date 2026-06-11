@@ -75,6 +75,9 @@ func (c *Client) DownloadAttachment(ctx context.Context, cardID, attachmentID, o
 	if err != nil {
 		return AttachmentDownloadResult{}, contract.NewError(contract.UnknownError, fmt.Sprintf("failed to write output file: %v", err))
 	}
+	if err := file.Close(); err != nil {
+		return AttachmentDownloadResult{}, contract.NewError(contract.UnknownError, fmt.Sprintf("failed to finalize output file: %v", err))
+	}
 
 	return AttachmentDownloadResult{
 		ID:       attachment.ID,
