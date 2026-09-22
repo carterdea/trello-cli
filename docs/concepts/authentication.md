@@ -51,6 +51,8 @@ trello auth clear
 - Stored credentials are written to the OS keyring when available.
 - Environment credentials are read from `TRELLO_API_KEY` and `TRELLO_TOKEN`.
 - The CLI uses a fallback chain: keyring first, then environment variables.
+- If the keyring cannot be read, a complete environment key/token pair is used. Partial environment credentials never replace stored credentials or hide keyring errors.
+- A keyring access error does not mean the credentials are missing or invalid. Check OS keyring access, or supply both `TRELLO_API_KEY` and `TRELLO_TOKEN` to bypass an unavailable keyring.
 - Stored credentials are associated with the `default` profile in the current implementation.
 
 ## Device Flow Login (Recommended)
