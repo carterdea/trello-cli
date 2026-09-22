@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/Scale-Flow/trello-cli/internal/contract"
 )
 
 // ClientOptions holds configuration for the API client.
@@ -164,7 +166,7 @@ func (c *Client) PostMultipart(ctx context.Context, path string, params map[stri
 func (c *Client) buildURL(path string, params map[string]string) (string, error) {
 	u, err := url.Parse(c.baseURL + path)
 	if err != nil {
-		return "", fmt.Errorf("invalid URL %q: %w", c.baseURL+path, err)
+		return "", contract.NewError(contract.HTTPError, "invalid Trello API request URL")
 	}
 	q := u.Query()
 	q.Set("key", c.apiKey)
@@ -240,7 +242,7 @@ func (c *Client) doWithBody(ctx context.Context, method, path string, params map
 
 		req, err := http.NewRequestWithContext(ctx, method, fullURL, bodyReader)
 		if err != nil {
-			return fmt.Errorf("failed to create request: %w", err)
+			return contract.NewError(contract.HTTPError, "failed to create Trello API request")
 		}
 		if contentType != "" && body != nil {
 			req.Header.Set("Content-Type", contentType)
@@ -248,13 +250,12 @@ func (c *Client) doWithBody(ctx context.Context, method, path string, params map
 
 		start := time.Now()
 		if c.opts.Verbose {
-			logURL := c.baseURL + path
-			slog.Debug("trello request", "method", method, "url", logURL, "attempt", attempt+1)
+			slog.Debug("trello request", "method", method, "attempt", attempt+1)
 		}
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
-			return fmt.Errorf("request failed: %w", err)
+			return contract.NewError(contract.HTTPError, "failed to reach Trello API; check network access and retry")
 		}
 
 		if c.opts.Verbose {

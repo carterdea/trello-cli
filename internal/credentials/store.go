@@ -78,11 +78,11 @@ func (k *KeyringStore) Get(profile string) (Credentials, error) {
 		if errors.Is(err, keyring.ErrNotFound) {
 			return Credentials{}, ErrNotConfigured
 		}
-		return Credentials{}, err
+		return Credentials{}, errors.New("cannot read credentials from the OS keyring; check keyring access or set both TRELLO_API_KEY and TRELLO_TOKEN")
 	}
 	var creds Credentials
 	if err := json.Unmarshal([]byte(data), &creds); err != nil {
-		return Credentials{}, err
+		return Credentials{}, errors.New("cannot decode credentials from the OS keyring; set both TRELLO_API_KEY and TRELLO_TOKEN to use environment credentials")
 	}
 	return creds, nil
 }
@@ -136,7 +136,7 @@ func (e *EnvStore) Delete(profile string) error {
 	return ErrReadOnly
 }
 
-// FallbackStore tries the primary Store first and falls back to secondary when credentials are not configured.
+// FallbackStore tries the secondary Store when the primary cannot provide credentials.
 type FallbackStore struct {
 	primary   Store
 	secondary Store
@@ -155,10 +155,14 @@ func (f *FallbackStore) Get(profile string) (Credentials, error) {
 	if err == nil {
 		return creds, nil
 	}
+	fallback, fallbackErr := f.secondary.Get(profile)
+	if fallbackErr == nil {
+		return fallback, nil
+	}
 	if !errors.Is(err, ErrNotConfigured) {
 		return Credentials{}, err
 	}
-	return f.secondary.Get(profile)
+	return Credentials{}, fallbackErr
 }
 
 func (f *FallbackStore) Set(profile string, creds Credentials) error {

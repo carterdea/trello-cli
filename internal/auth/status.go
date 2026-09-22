@@ -68,7 +68,7 @@ func Status(ctx context.Context, store credentials.Store, profile, baseURL strin
 func getMember(ctx context.Context, baseURL, apiKey, token string) (*Member, error) {
 	memberURL, err := url.Parse(baseURL)
 	if err != nil {
-		return nil, contract.NewError(contract.HTTPError, fmt.Sprintf("failed to parse Trello base URL: %v", err))
+		return nil, contract.NewError(contract.HTTPError, "invalid Trello API base URL")
 	}
 	memberURL.Path = "/1/members/me"
 	query := memberURL.Query()
@@ -78,13 +78,13 @@ func getMember(ctx context.Context, baseURL, apiKey, token string) (*Member, err
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, memberURL.String(), nil)
 	if err != nil {
-		return nil, contract.NewError(contract.HTTPError, fmt.Sprintf("failed to create member request: %v", err))
+		return nil, contract.NewError(contract.HTTPError, "failed to create Trello member request")
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, contract.NewError(contract.HTTPError, fmt.Sprintf("failed to reach Trello API: %v", err))
+		return nil, contract.NewError(contract.HTTPError, "failed to reach Trello API; check network access and retry")
 	}
 	defer resp.Body.Close()
 

@@ -35,7 +35,7 @@ func (c *Client) DownloadAttachment(ctx context.Context, cardID, attachmentID, o
 		return AttachmentDownloadResult{}, err
 	}
 	if err := contract.ValidateURL(attachment.URL); err != nil {
-		return AttachmentDownloadResult{}, err
+		return AttachmentDownloadResult{}, contract.NewError(contract.ValidationError, "invalid attachment download URL")
 	}
 
 	finalPath, err := resolveAttachmentOutputPath(outputPath, attachment)
@@ -52,14 +52,14 @@ func (c *Client) DownloadAttachment(ctx context.Context, cardID, attachmentID, o
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {
-		return AttachmentDownloadResult{}, err
+		return AttachmentDownloadResult{}, contract.NewError(contract.HTTPError, "failed to create attachment download request")
 	}
 	if needsAuth {
 		c.setTrelloAuthorization(req)
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return AttachmentDownloadResult{}, contract.NewError(contract.HTTPError, fmt.Sprintf("download failed: %v", err))
+		return AttachmentDownloadResult{}, contract.NewError(contract.HTTPError, "attachment download failed; check network access and retry")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= http.StatusBadRequest {
@@ -116,7 +116,7 @@ func (c *Client) DeleteAttachment(ctx context.Context, cardID, attachmentID stri
 func (c *Client) attachmentDownloadURL(attachment Attachment) (string, bool, error) {
 	u, err := url.Parse(attachment.URL)
 	if err != nil {
-		return "", false, err
+		return "", false, contract.NewError(contract.ValidationError, "invalid attachment download URL")
 	}
 	needsAuth := isTrelloHost(u.Hostname()) || (attachment.IsUpload && c.isBaseHost(u.Hostname()))
 	return u.String(), needsAuth, nil
@@ -270,13 +270,13 @@ func (c *Client) postMultipartFile(ctx context.Context, path, filePath string, p
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, body)
 	if err != nil {
-		return err
+		return contract.NewError(contract.HTTPError, "failed to create attachment upload request")
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return contract.NewError(contract.HTTPError, fmt.Sprintf("upload failed: %v", err))
+		return contract.NewError(contract.HTTPError, "attachment upload failed; check network access and retry")
 	}
 	defer resp.Body.Close()
 
