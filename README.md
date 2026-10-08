@@ -43,7 +43,7 @@ Download `trello-cli_<version>_windows_amd64.zip` (or `_arm64`) from [GitHub Rel
 ```powershell
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
 $dir = "$env:LOCALAPPDATA\Programs\trello"
-$zip = (Get-ChildItem "trello-cli_*_windows_$arch.zip" | Select-Object -Last 1).FullName
+$zip = (Get-ChildItem "trello-cli_*_windows_$arch.zip" | Sort-Object LastWriteTime | Select-Object -Last 1).FullName
 Expand-Archive -LiteralPath $zip -DestinationPath $dir -Force
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if (($userPath -split ";") -notcontains $dir) {
