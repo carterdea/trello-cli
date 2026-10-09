@@ -36,6 +36,23 @@ go install github.com/Scale-Flow/trello-cli/cmd/trello@latest
 
 Download the latest release for your platform from [GitHub Releases](https://github.com/Scale-Flow/trello-cli/releases).
 
+### Windows
+
+Download `trello-cli_<version>_windows_amd64.zip` (or `_arm64`) from [GitHub Releases](https://github.com/Scale-Flow/trello-cli/releases), extract `trello.exe`, and put it in a folder on your `PATH`. In PowerShell, from the folder holding the download:
+
+```powershell
+$arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
+$dir = "$env:LOCALAPPDATA\Programs\trello"
+$zip = (Get-ChildItem "trello-cli_*_windows_$arch.zip" | Sort-Object LastWriteTime | Select-Object -Last 1).FullName
+Expand-Archive -LiteralPath $zip -DestinationPath $dir -Force
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+if (($userPath -split ";") -notcontains $dir) {
+  [Environment]::SetEnvironmentVariable("Path", "$userPath;$dir".TrimStart(";"), "User")
+}
+```
+
+Open a new terminal and run `trello version`. Credentials are stored in Windows Credential Manager. If that is unavailable, set `TRELLO_API_KEY` and `TRELLO_TOKEN` instead. The optional config file lives at `%USERPROFILE%\.config\trello-cli\config.yaml`.
+
 ## Claude Code Skill
 
 This repo ships a Claude Code skill that lets Claude manage Trello autonomously — creating cards, moving work across lists, searching boards, and more.

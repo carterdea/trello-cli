@@ -22,6 +22,10 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # Type-checks Windows code paths and tests without paying for a Windows runner.
+      - name: Vet (Windows cross-compile)
+        run: GOOS=windows go vet ./...
+
       - name: Test
         run: go test -count=1 -race -cover ./...
 
