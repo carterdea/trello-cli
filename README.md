@@ -34,11 +34,11 @@ go install github.com/Scale-Flow/trello-cli/cmd/trello@latest
 
 ### Download Binary
 
-Download the latest release for your platform from [GitHub Releases](https://github.com/Scale-Flow/trello-cli/releases).
+Download the latest release for your platform from [GitHub Releases](https://github.com/carterdea/trello-cli/releases). This fork's releases include attachment downloads; the Homebrew tap and `go install` above give the upstream build.
 
 ### Windows
 
-Download `trello-cli_<version>_windows_amd64.zip` (or `_arm64`) from [GitHub Releases](https://github.com/Scale-Flow/trello-cli/releases), extract `trello.exe`, and put it in a folder on your `PATH`. In PowerShell, from the folder holding the download:
+Download `trello-cli_<version>_windows_amd64.zip` (or `_arm64`) from [GitHub Releases](https://github.com/carterdea/trello-cli/releases), extract `trello.exe`, and put it in a folder on your `PATH`. In PowerShell, from the folder holding the download:
 
 ```powershell
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
