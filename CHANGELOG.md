@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-10-12
+
+### Added
+
+- `trello attachments download` saves a card attachment to a local file or directory, authenticated, with `--force` to overwrite
+- Windows install instructions
+
+### Fixed
+
+- Auth recovers safely when the OS keyring is unavailable: a complete `TRELLO_API_KEY` / `TRELLO_TOKEN` pair is used, and partial environment credentials never hide a keyring error
+
+### Changed
+
+- Releases are published from this fork's GitHub Releases; the Homebrew tap step is removed
+
 ## [1.1.0] - 2026-03-13
 
 ### Added
